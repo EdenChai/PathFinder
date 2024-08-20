@@ -1,0 +1,7 @@
+networkx~=3.3
+Flask~=3.0.3
+fastkml~=0.12
+flask-cors~=4.0.1
+haversine~=2.8.1
+lxml~=5.3.0
+shapely~=2.0.6
