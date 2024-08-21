@@ -29,7 +29,7 @@ cd PathFinder
      
 2. **Activate the virtual environment**:
      ```bash
-     .venv\Scripts\activate
+     .\.venv\Scripts\activate
      ```
 
 3. **Install the required packages**:
