@@ -5,90 +5,50 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Graph-Based Route Finder</title>
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-        <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+        <link rel="stylesheet" href="/static/css/style.css">
     </head>
+
     <body>
+        <!------------ Form Section ------------>
         <div class="container my-5">
             <h1 class="text-center mb-4">Graph-Based Route Finder Web Application</h1>
-
             <form id="path-form">
+                <!------------ Start Point ------------>
                 <div class="form-row">
                     <div class="form-group col-md-6">
                         <label for="start-lat">Start Latitude</label>
-                        <input type="text" class="form-control" id="start-lat" name="start-lat" placeholder="XX.XX" required pattern="\d{1,2}.\d{1,2}">
+                        <input type="text" class="form-control" id="start-lat" name="start-lat" placeholder="Enter start latitude" required pattern="-?\d{1,2}\.\d{1,6}">
                     </div>
                     <div class="form-group col-md-6">
                         <label for="start-lon">Start Longitude</label>
-                        <input type="text" class="form-control" id="start-lon" name="start-lon" placeholder="XX.XX" required pattern="\d{1,2}.\d{1,2}">
+                        <input type="text" class="form-control" id="start-lon" name="start-lon" placeholder="Enter start longitude" required pattern="-?\d{1,3}\.\d{1,6}">
                     </div>
                 </div>
-
+                <!------------- End Point ------------->
                 <div class="form-row">
                     <div class="form-group col-md-6">
                         <label for="end-lat">End Latitude</label>
-                        <input type="text" class="form-control" id="end-lat" name="end-lat" placeholder="XX.XX" required pattern="\d{1,2}.\d{1,2}">
+                        <input type="text" class="form-control" id="end-lat" name="end-lat" placeholder="Enter end latitude" required pattern="-?\d{1,2}\.\d{1,6}">
                     </div>
                     <div class="form-group col-md-6">
                         <label for="end-lon">End Longitude</label>
-                        <input type="text" class="form-control" id="end-lon" name="end-lon" placeholder="XX.XX" required pattern="\d{1,2}.\d{1,2}">
+                        <input type="text" class="form-control" id="end-lon" name="end-lon" placeholder="Enter end longitude" required pattern="-?\d{1,3}\.\d{1,6}">
                     </div>
                 </div>
-
+                <!----------- Submit Button ----------->
                 <button type="submit" class="btn btn-block btn-primary">Find Path</button>
             </form>
+        </div>
 
+        <!------------ Result Section ------------>
+        <div id="result-container" class="container my-5" style="display:none;">
+            <h1 class="text-center mb-4">Result</h1>
             <div id="result" class="mt-4"></div>
         </div>
 
-        <script>
-            document.getElementById('path-form').addEventListener('submit', async function (event) {
-                event.preventDefault();
+        <!------------ Scripts Section ------------>
+        <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+        <script src="/static/js/script.js"></script>
 
-                // Get the values from the form fields
-                const startLat = document.getElementById('start-lat').value;
-                const startLon = document.getElementById('start-lon').value;
-                const endLat = document.getElementById('end-lat').value;
-                const endLon = document.getElementById('end-lon').value;
-
-                try {
-                    // Send the coordinates to the server in the expected format
-                    const response = await fetch('http://127.0.0.1:5000/', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            start: {lat: startLat, lon: startLon},
-                            end: {lat: endLat, lon: endLon}
-                        })
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-
-                    // Get the JSON response
-                    const result = await response.json();
-
-                    // Display the result
-                    if (result.shortest_path) {
-                        document.getElementById('result').innerHTML = `
-                            <p>Shortest Path: ${JSON.stringify(result.shortest_path)}</p>
-                            <a id="download-link" class="btn btn-success" download="shortest_path.kml">Download KML File</a>
-                            `;
-
-                        // Create a Blob from the KML content and set the download link
-                        const blob = new Blob([result.kml_content], {type: 'application/vnd.google-earth.kml'});
-                        const url = URL.createObjectURL(blob);
-                        document.getElementById('download-link').href = url;
-                    } else {
-                        document.getElementById('result').textContent = 'Error: ' + result.error;
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    document.getElementById('result').textContent = 'An error occurred while finding the path.';
-                }
-            });
-        </script>
     </body>
 </html>
