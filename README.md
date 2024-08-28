@@ -14,11 +14,15 @@ The application also provides an option to generate a KML file representing the 
 ## Instructions
 
 ### 1. Clone the Repository
-To get started, first clone the repository to your local machine:
-```bash
-git clone https://github.com/edenchai/PathFinder.git
-cd PathFinder
-```
+- First, clone the repository to your local machine:
+    ```bash
+    git clone https://github.com/edenchai/PathFinder.git
+    ```
+
+* Navigate to the project path:
+    ```bash
+    cd PathFinder
+    ```
 
 ### 2. Install Required Packages
 
@@ -29,7 +33,7 @@ cd PathFinder
      
 2. **Activate the virtual environment**:
      ```bash
-     .\.venv\Scripts\activate
+     .\venv\Scripts\activate
      ```
 
 3. **Install the required packages**:
@@ -39,11 +43,9 @@ cd PathFinder
 
 ### 3. Run the Application
 To run the application locally, use the following command:
-
 ```bash
 flask run
 ```
-
 This will start the Flask development server, and the application will be accessible at `http://127.0.0.1:5000/`.
 
 ### 4. Using the Application
