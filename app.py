@@ -4,23 +4,50 @@ import networkx as nx
 from fastkml import kml
 from flask_cors import CORS
 from haversine import haversine, Unit
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Point
+from scipy import spatial
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 
+# Constants
+GRAPH_FILE = 'graph_example.json'
+
+# Global flag to track initialization
+initialized = False
+
+@app.before_request
+def initialize():
+	"""
+	The function effectively implements the Singleton design pattern.
+	Initialize the graph and KD-Tree before handling the first request.
+	This ensures that resources are loaded once and available for all subsequent requests.
+	"""
+	global initialized
+	if not initialized:
+		graph_data = load_json_file(GRAPH_FILE)
+		app.config['graph'] = create_graph(graph_data)
+		app.config['kd_tree'] = create_kd_tree()
+		initialized = True
+
 def load_json_file(file_name):
 	"""
-		The function loads the data from the JSON file
+	Load the graph data from a JSON file.
+
+	:param file_name: The name of the file to load.
+	:return: The graph data as a dictionary.
 	"""
 	with open(file_name, 'r') as f:
 		graph_data = json.load(f)
 		return graph_data
 
-def create_predefined_graph(graph_data):
+def create_graph(graph_data):
 	"""
-		I chose to use networkX to build the predefined graph.
-		In this way, we can do complex calculations.
+		Build a graph using NetworkX from the provided data.
+		Using NetworkX is useful for making complex calculations.
+
+	    :param graph_data: Dictionary of graph data where keys are nodes and values are their neighbors.
+	    :return: A NetworkX graph object.
 	"""
 	G = nx.Graph()
 	for node, neighbors in graph_data.items():
@@ -34,137 +61,143 @@ def create_predefined_graph(graph_data):
 
 def calculate_distance(p1, p2):
 	"""
-		This function calculates the distance between two neighbor nodes.
-		I used Haversine formula because it has O(1) time complexity.
+    Calculate the distance between two points using the Haversine formula.
+	The haversine formula determines the great-circle distance between
+	two points on a sphere given their longitudes and latitudes.
+
+    :param p1: Tuple representing the first point (latitude, longitude).
+    :param p2: Tuple representing the second point (latitude, longitude).
+    :return: The distance between the two points in meters.
 	"""
 	return haversine(p1, p2, unit=Unit.METERS)
 
-def find_closest_point(G, point):
+def create_kd_tree():
 	"""
-		Complexity O(n * m) where n is the number of vertices and m is the number of queries.
-		Since the problem requires only m=2 queries, the running time will be linear.
-		Alternative - using a "K-D Tree" requires O(n*logn) runtime and O(n) space.
+		Create a KD-Tree from the graph nodes for efficient nearest neighbor search.
+		Time Complexity: O(N*log(N)) for building the tree.
+		Space Complexity: O(N)
+
+		:return: A KD-Tree object.
 	"""
-	min_distance = float('inf')
-	closest_point = None
-	for node in G.nodes():
-		distance = calculate_distance(point, node)
-		if distance < min_distance:
-			min_distance = distance
-			closest_point = node
+	G = app.config['graph']
+	kd_tree = spatial.KDTree(G.nodes())
+	return kd_tree
+
+def find_closest_point(point):
+	"""
+	    Find the closest point in the graph to the given point using a KD-Tree.
+		Time Complexity: O(logN)
+
+		:param point: The point for which to find the closest point.
+		:return: The closest point in the graph.
+	"""
+	G = app.config['graph']
+	kd_tree = app.config['kd_tree']
+	node_list = list(G.nodes())
+	index = kd_tree.query(point)[1]
+	closest_point = node_list[index]
 	return closest_point
 
-def find_shortest_path(G, start_point, end_point):
+def find_shortest_path(start_point, end_point):
 	"""
-		The function calculate the shortest distance and returns the shortest path.
-		I used Dijkstra algorithm to find the shortest path.
-		Dijkstra algorithm is optimal for finding the shortest path in graphs with non-negative edge weights.
-		Time Complexity: O(V^2)
+	    Find the shortest path between two points in the graph using Dijkstra's algorithm.
+		Time Complexity: O((V+E)*log(V)) - it's using with a priority queue.
+
+	    :param start_point: The starting point as a tuple (latitude, longitude).
+	    :param end_point: The ending point as a tuple (latitude, longitude).
+	    :return: A list representing the shortest path, or None if no path exists.
 	"""
+	G = app.config['graph']
 	try:
 		shortest_path = nx.dijkstra_path(G, source=start_point, target=end_point, weight="weight")
 		return shortest_path
 	except nx.NetworkXNoPath:
 		return None
 
-def generate_KML_file(shortest_path):
+def generate_kml_file(shortest_path):
 	"""
-		This function generates a KML file representing the shortest path.
+	    Generate a KML file representing the shortest path.
+
 		:param shortest_path: A list of coordinates representing the shortest path.
         :return: A string containing the KML file content.
 	"""
-
-	# Create a aKML object
 	k = kml.KML()
-
-	# KML namespace
-	ns = '{http://www.opengis.net/kml/2.2}'
-
-	# Create a document
-	doc = kml.Document(ns, 'doc_id', 'Shortest Path')
+	namespace = '{http://www.opengis.net/kml/2.2}'
+	doc = kml.Document(ns=namespace, id='doc_id', name='Shortest Path')
 	k.append(doc)
 
 	# Correct the order to (longitude, latitude)
 	corrected_path = [(lon, lat) for lat, lon in shortest_path]
 
+	# Create placemarks for each point in the path
+	for index, (lon, lat) in enumerate(corrected_path):
+		point = Point(lon, lat)
+		point_placemark = kml.Placemark(ns=namespace, id=f'point_{index}', name=f'Point {index + 1}')
+		point_placemark.geometry = point
+		doc.append(point_placemark)
+
 	# Create a linestring for the shortest path
 	line = LineString(corrected_path)
-
-	placemark = kml.Placemark(ns=ns, name="Shortest Path")
-	placemark.geometry = line
-	doc.append(placemark)
+	path_placemark = kml.Placemark(ns=namespace, id='path', name='Shortest Path')
+	path_placemark.geometry = line
+	doc.append(path_placemark)
 
 	# Return the KML content as a string
 	return k.to_string(prettyprint=True)
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/', methods=['GET'])
+def render_page():
+	"""
+	    Handle the GET request to render the HTML page.
+		:return: The rendered HTML page.
+	"""
+	return render_template('index.html')
+
+@app.route('/', methods=['POST'])
 def find_path():
 	"""
-	    This endpoint handles both GET and POST requests.
-	    For POST requests, it calculates the shortest path between two point and returns the path and KML content.
-	    For GET requests, it renders the index.html page.
-	    :return: JSON response with the shortest path and KML content, or an HTML page.
+	    Handle the POST request to find the shortest path between two points.
+	    :return: A JSON response with the shortest path and KML content, or an error message.
 	"""
+	try:
+		# Extract start and end coordinates from the incoming JSON request
+		start_lat = float(request.json['start']['lat'])
+		start_lon = float(request.json['start']['lon'])
+		end_lat = float(request.json['end']['lat'])
+		end_lon = float(request.json['end']['lon'])
 
-	# Need for loading the HTML page
-	if request.method == 'POST':
+		# Validate the input coordinates
+		if not (-90 <= start_lat <= 90) or not (-180 <= start_lon <= 180):
+			return jsonify({ 'error': 'Invalid start point input! Please enter valid coordinates.' }), 400
+		if not (-90 <= end_lat <= 90) or not (-180 <= end_lon <= 180):
+			return jsonify({ 'error': 'Invalid end point input! Please enter valid coordinates.' }), 400
 
-		try:
-			# Load graph data from JSON file
-			graph_data = load_json_file('graph_example.json')
+		# Convert the coordinates to tuples
+		start_point = (start_lat, start_lon)
+		end_point = (end_lat, end_lon)
 
-			# Create the predefined graph
-			G = create_predefined_graph(graph_data)
+		if start_point == end_point:
+			return jsonify({'error': 'Start and end points cannot be the same'}), 404
 
-			# Extract start and end coordinates from the incoming JSON request
-			start_lat = float(request.json['start']['lat'])
-			start_lon = float(request.json['start']['lon'])
-			end_lat = float(request.json['end']['lat'])
-			end_lon = float(request.json['end']['lon'])
+		# Find the closest points in the graph
+		start_closest = find_closest_point(start_point)
+		end_closest = find_closest_point(end_point)
 
-			# Validate the input coordinates
-			if not (-90 <= start_lat <= 90) or not (-180 <= start_lon <= 180):
-				raise ValueError("Invalid start coordinates")
-			if not (-90 <= end_lat <= 90) or not (-180 <= end_lon <= 180):
-				raise ValueError("Invalid end coordinates")
+		if start_closest == end_closest:
+			return jsonify({'error': 'Start and end points are too close; please provide more distant points'}), 404
 
-			# Define start and end points as tuples
-			start_point = (start_lat, start_lon)
-			end_point = (end_lat, end_lon)
+		# Find the shortest path between the closest points
+		shortest_path = find_shortest_path(start_closest, end_closest)
 
-			if start_point == end_point:
-				return jsonify({'error': 'Do not enter the same coordinates of the start and end points'}), 404
+		if shortest_path:
+			kml_content = generate_kml_file(shortest_path)
+			return jsonify({ 'shortest_path': shortest_path, 'kml_content': kml_content }), 200
+		else:
+			return jsonify({ 'error': 'No path found between the provided points.' }), 404
 
-			# Find the closest points in the graph
-			start_closest = find_closest_point(G, start_point)
-			end_closest = find_closest_point(G, end_point)
-
-			if start_closest == end_closest:
-				return jsonify({'error': 'The closest start and end points have the same coordinates. Try entering more distant points.'}), 404
-
-			# Calculate the shortest path
-			shortest_path = find_shortest_path(G, start_closest, end_closest)
-
-			if shortest_path is not None:
-				# Generate KML file
-				kml_content = generate_KML_file(shortest_path)
-
-				return jsonify({
-					'shortest_path': shortest_path,
-					'kml_content': kml_content
-				}), 200
-			else:
-				return jsonify({ 'error': 'No path found between the provided points.' }), 404
-
-		except KeyError as e:
-			return jsonify({ 'error': f'Missing data {str(e)}' }), 400
-
-		except ValueError:
-			return jsonify({ 'error': 'Invalid input! Please enter valid coordinates.' }), 400
-
-	else:
-		return render_template('index.html')
+	except KeyError as e:
+		return jsonify({ 'error': f'Missing data {str(e)}' }), 400
 
 
 if __name__ == '__main__':
-	app.run(debug=False)
+	app.run(debug=True)
